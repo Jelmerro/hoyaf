@@ -1,0 +1,154 @@
+#!/bin/bash
+declare -A companies=(
+    ["google"]="AS15169"
+    ["amazon"]="AS14618"
+    ["facebook"]="AS32934"
+    ["apple"]="AS714"
+    ["microsoft"]="AS8075"
+    ["ibm"]="AS2140"
+    ["alibaba"]="AS45102"
+    ["tencent"]="AS45090"
+)
+blocklist=()
+unblocklist=()
+
+function printUsage {
+    echo "Horsemen of your altered future"
+    echo
+    echo "Block the four horsemen and other companies permanently using routing tables"
+    echo
+    echo "Usage: hoyaf [-b name] [-u name] [-l] [-h]"
+    echo
+    echo "Options:"
+    echo "  -b/--block <name> - block the ip ranges of a company by name or asn"
+    echo "  -u/--unblock <name> - unblock the ip ranges of a company by name or asn"
+    echo "  -l/--list - show a list of all companies and the blockage status"
+    echo "  -h/--help - show this help page"
+    echo
+    echo "The name can be: 'all', a company name, or a custom ASN."
+    echo "Both options can be repeated as many times as needed."
+    echo "Companies that can be blocked by name using hoyaf:"
+    echo ${!companies[@]}
+    echo
+    echo "Hoyaf requires curl, proxychains and tor to fetch the ranges."
+    echo "See https://github.com/Jelmerro/hoyaf for updates and details."
+    exit
+}
+
+function unblockByASN {
+    echo "Unblocking $1"
+    file="/root/.cache/hoyaf/$1"
+    if [[ -f $file ]];then
+        echo "  Removing `wc -l < $file` rules from routing table"
+        while read line;do
+            route del -net $line gw 127.0.0.1 lo &>/dev/null
+        done < $file
+        rm $file
+        echo "  Done"
+    else
+        echo "  Skipped, not currently blocked"
+    fi
+    rmdir /root/.cache/hoyaf/ &> /dev/null
+}
+
+function blockByASN {
+    mkdir -p /root/.cache/hoyaf/
+    echo "Blocking $1"
+    file="/root/.cache/hoyaf/$1"
+    if [[ -f $file ]];then
+        echo "  Skipped, already blocked"
+    else
+        proxychains curl -L "https://ipinfo.io/$1#blocks" 2>/dev/null | grep "$1/" | cut -f 2 -d '"' | cut -f 3-4 -d '/' | sed '/::/d' > $file
+        if [ -s $file ];then
+            echo "  Adding `wc -l < $file` rules to routing table"
+            while read line;do
+                route add -net $line gw 127.0.0.1 lo &>/dev/null
+            done < $file
+            echo "  Done"
+        else
+            echo "  Failure, could not download ip ranges"
+            rm $file
+        fi
+    fi
+}
+
+function listBlocked {
+    if (( $(id -u) != 0 ));then
+        echo "Hoyaf requires root access for reading the routing table."
+        exit 1
+    fi
+    blocked=`dir /root/.cache/hoyaf/ 2> /dev/null`
+    if [[ -z $blocked ]];then
+        echo "There are currently no companies blocked by hoyaf."
+    else
+        echo "Currenly blocked companies:"
+        for asn in $blocked;do
+            found=""
+            for company in "${!companies[@]}";do
+               if [[ "${companies[$company]}" == $asn ]];then
+                   echo "$company ($asn)"
+                   found="y"
+               fi
+            done
+            if [[ -z $found ]];then
+                echo $asn
+            fi
+        done
+    fi
+    exit
+}
+
+while [ "$#" -gt 0 ];do
+    case "$1" in
+        -b) blocklist=("${blocklist[@]}" "$2");shift 2;;
+        -u) unblocklist=("${unblocklist[@]}" "$2");shift 2;;
+        --block) blocklist=("${blocklist[@]}" "$2");shift 2;;
+        --unblock) unblocklist=("${unblocklist[@]}" "$2");shift 2;;
+        -h) printUsage;;
+        --help) printUsage;;
+        -l) listBlocked;;
+        --list) listBlocked;;
+        *) echo "Unknown option: $1";echo "See -h for usage.";exit 1;
+    esac
+done
+if [[ -z "${blocklist[@]}${unblocklist[@]}" ]];then
+    printUsage
+fi
+if (( $(id -u) != 0 ));then
+    echo "Hoyaf requires root access for modifying the routing table."
+    exit 1
+fi
+for block in "${blocklist[@]}" "${unblocklist[@]}";do
+    if [[ -z "${companies[${block,,}]}" ]];then
+        if [[ ${block^^} != AS* ]];then
+            if [[ ${block,,} != all ]];then
+                echo "$block is not a known company or valid ASN."
+                echo "Companies that can be blocked by name using hoyaf:"
+                echo ${!companies[@]}
+                exit 1
+            fi
+        fi
+    fi
+done
+for unblock in "${unblocklist[@]}"; do
+    if [[ ${unblock,,} == all ]];then
+        for company in "${companies[@]}";do
+            unblockByASN $company
+        done
+    elif [[ ! -z "${companies[${unblock,,}]}" ]];then
+        unblockByASN "${companies[${unblock,,}]}"
+    else
+        unblockByASN ${unblock^^}
+    fi
+done
+for block in "${blocklist[@]}"; do
+    if [[ ${block,,} == all ]];then
+        for company in "${companies[@]}";do
+            blockByASN $company
+        done
+    elif [[ ! -z "${companies[${block,,}]}" ]];then
+        blockByASN "${companies[${block,,}]}"
+    else
+        blockByASN ${block^^}
+    fi
+done
