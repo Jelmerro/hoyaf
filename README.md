@@ -1,7 +1,7 @@
 Horsemen of your altered future
 ===============================
 
-#### Block the four horsemen and other companies permanently using routing tables
+#### Block the four horsemen and other companies permanently using iptables
 
 ## A New World
 
@@ -9,13 +9,14 @@ Horsemen of your altered future
 - Redirect all ip ranges to 127.0.0.1 to prevent a connection
 - Enable or disable ip ranges in bulk for a single or all included companies
 - Block any other company that has an Autonomous System Number (ASN) on ipinfo.io
+- Persistent across reboots thanks to iptables-save (last line of the script)
 
 ## Alter your future
 
 Hoyaf has two optional arguments to block, which can be repeated as needed:
 
-- `-b <name>` / `--block <name>` to add a range of addresses to the routing table.
-- `-u <name>` / `--unblock <name>` to add a range of addresses to the routing table.
+- `-b <name>` / `--block <name>` to add a range of addresses to iptables.
+- `-u <name>` / `--unblock <name>` to remove a range of addresses from iptables.
 
 For both options, the name can be: `all`, a company name, or a custom ASN.
 
@@ -46,6 +47,9 @@ Other terms are inspired by the great King Gizzard & the Lizard Wizard album nam
 Finally thanks to [ipinfo.io](https://ipinfo.io) for providing the ip range lists.
 
 Hoyaf is written in bash and uses curl, proxychains and tor to fetch the ip ranges.
+The ranges are then blocked using iptables.
+If the rules are not persistent when rebooting,
+check if the iptables location at the end of the program is correct for your linux distribution.
 
 ## Alter Me
 

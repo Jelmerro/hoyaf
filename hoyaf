@@ -15,7 +15,7 @@ unblocklist=()
 function printUsage {
     echo "Horsemen of your altered future"
     echo
-    echo "Block the four horsemen and other companies permanently using routing tables"
+    echo "Block the four horsemen and other companies permanently using iptables"
     echo
     echo "Usage: hoyaf [-b name] [-u name] [-l] [-h]"
     echo
@@ -39,9 +39,9 @@ function unblockByASN {
     echo "Unblocking $1"
     file="/root/.cache/hoyaf/$1"
     if [[ -f $file ]];then
-        echo "  Removing `wc -l < $file` rules from routing table"
+        echo "  Removing `wc -l < $file` rules from iptables"
         while read line;do
-            route del -net $line gw 127.0.0.1 lo &>/dev/null
+            iptables -D OUTPUT -d $line -j DROP
         done < $file
         rm $file
         echo "  Done"
@@ -58,11 +58,12 @@ function blockByASN {
     if [[ -f $file ]];then
         echo "  Skipped, already blocked"
     else
+        echo "  Downloading ip ranges from ipinfo.io"
         proxychains curl -L "https://ipinfo.io/$1#blocks" 2>/dev/null | grep "$1/" | cut -f 2 -d '"' | cut -f 3-4 -d '/' | sed '/::/d' > $file
         if [ -s $file ];then
-            echo "  Adding `wc -l < $file` rules to routing table"
+            echo "  Adding `wc -l < $file` rules to iptables"
             while read line;do
-                route add -net $line gw 127.0.0.1 lo &>/dev/null
+                iptables -I OUTPUT -d $line -j DROP
             done < $file
             echo "  Done"
         else
@@ -74,7 +75,7 @@ function blockByASN {
 
 function listBlocked {
     if (( $(id -u) != 0 ));then
-        echo "Hoyaf requires root access for reading the routing table."
+        echo "Hoyaf requires root access for reading iptables."
         exit 1
     fi
     blocked=`dir /root/.cache/hoyaf/ 2> /dev/null`
@@ -115,7 +116,7 @@ if [[ -z "${blocklist[@]}${unblocklist[@]}" ]];then
     printUsage
 fi
 if (( $(id -u) != 0 ));then
-    echo "Hoyaf requires root access for modifying the routing table."
+    echo "Hoyaf requires root access for modifying iptables."
     exit 1
 fi
 for block in "${blocklist[@]}" "${unblocklist[@]}";do
@@ -152,3 +153,4 @@ for block in "${blocklist[@]}"; do
         blockByASN ${block^^}
     fi
 done
+iptables-save > /etc/sysconfig/iptables
