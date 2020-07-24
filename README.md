@@ -6,7 +6,8 @@ Horsemen of your altered future
 ## A New World
 
 - Fetches the list of ip ranges from ipinfo.io for a defined list of companies
-- Redirect all ip ranges to 127.0.0.1 to prevent a connection
+- Drops all packets to any of the ips in the ranges
+- Checks and prevents duplicate rules from being added
 - Enable or disable ip ranges in bulk for a single or all included companies
 - Block any other company that has an Autonomous System Number (ASN) on ipinfo.io
 - Persistent across reboots thanks to iptables-save (last line of the script)
@@ -20,8 +21,9 @@ Hoyaf has two optional arguments to block, which can be repeated as needed:
 
 For both options, the name can be: `all`, a company name, or a custom ASN.
 
-Two other options are present in hoyaf:
+Three other options are present in hoyaf:
 
+- `-r` / `--refresh` to request the ip ranges again, even if they are cached
 - `-l` / `--list` to show a list of currently blocked companies (as far as hoyaf knows)
 - `-h` / `--help` to show the usage summary, similar to this paragraph
 
@@ -34,6 +36,8 @@ The fastest way to ban all included companies:
 This will without a doubt cause many familiar sites to break, or even be unreachable.
 It can always be completely reversed with `./hoyaf -u all`.
 Cherry-picking the companies that you don't want to deal with is recommended.
+Companies that were manually blocked are not included in the 'all' option,
+but they are visble in the list of currently active rules: `./hoyaf -l`.
 
 ## Some Context
 

@@ -11,6 +11,7 @@ declare -A companies=(
 )
 blocklist=()
 unblocklist=()
+refresh="false"
 
 function printUsage {
     echo "Horsemen of your altered future"
@@ -20,10 +21,11 @@ function printUsage {
     echo "Usage: hoyaf [-b name] [-u name] [-l] [-h]"
     echo
     echo "Options:"
-    echo "  -b/--block <name> - block the ip ranges of a company by name or asn"
-    echo "  -u/--unblock <name> - unblock the ip ranges of a company by name or asn"
-    echo "  -l/--list - show a list of all companies and the blockage status"
-    echo "  -h/--help - show this help page"
+    echo "  -b/--block <name>    block the ip ranges of a company by name or asn"
+    echo "  -u/--unblock <name>  unblock the ip ranges of a company by name or asn"
+    echo "  -r/--refresh         request the ip ranges again, even if they are cached"
+    echo "  -l/--list            show a list of all companies and the blockage status"
+    echo "  -h/--help            show this help page"
     echo
     echo "The name can be: 'all', a company name, or a custom ASN."
     echo "Both options can be repeated as many times as needed."
@@ -41,35 +43,39 @@ function unblockByASN {
     if [[ -f $file ]];then
         echo "  Removing `wc -l < $file` rules from iptables"
         while read line;do
-            iptables -D OUTPUT -d $line -j DROP
+            iptables -C OUTPUT -d $line -j DROP 2> /dev/null
+            if [[ $? == 0 ]];then
+                iptables -D OUTPUT -d $line -j DROP
+            fi
         done < $file
-        rm $file
         echo "  Done"
     else
         echo "  Skipped, not currently blocked"
     fi
-    rmdir /root/.cache/hoyaf/ &> /dev/null
 }
 
 function blockByASN {
     mkdir -p /root/.cache/hoyaf/
     echo "Blocking $1"
     file="/root/.cache/hoyaf/$1"
-    if [[ -f $file ]];then
-        echo "  Skipped, already blocked"
-    else
+    if [[ ! -f $file || ! -s $file || $refresh == "true" ]];then
         echo "  Downloading ip ranges from ipinfo.io"
         proxychains curl -L "https://ipinfo.io/$1#blocks" 2>/dev/null | grep "$1/" | cut -f 2 -d '"' | cut -f 3-4 -d '/' | sed '/::/d' > $file
-        if [ -s $file ];then
-            echo "  Adding `wc -l < $file` rules to iptables"
-            while read line;do
+    else
+        echo "  Using cached ranges, specify '--refresh' to download them anyway"
+    fi
+    if [[ -s $file ]];then
+        echo "  Adding `wc -l < $file` rules to iptables"
+        while read line;do
+            iptables -C OUTPUT -d $line -j DROP 2> /dev/null
+            if [[ $? == 1 ]];then
                 iptables -I OUTPUT -d $line -j DROP
-            done < $file
-            echo "  Done"
-        else
-            echo "  Failure, could not download ip ranges"
-            rm $file
-        fi
+            fi
+        done < $file
+        echo "  Done"
+    else
+        echo "  Failure, could not download ip ranges"
+        rm $file
     fi
 }
 
@@ -78,12 +84,19 @@ function listBlocked {
         echo "Hoyaf requires root access for reading iptables."
         exit 1
     fi
-    blocked=`dir /root/.cache/hoyaf/ 2> /dev/null`
+    cached=`dir /root/.cache/hoyaf/ 2> /dev/null`
+    blocked=()
+    for list in $cached;do
+        iptables -C OUTPUT -d `head -n 1 /root/.cache/hoyaf/$list` -j DROP 2> /dev/null
+        if [[ $? == 0 ]];then
+            blocked+=($list)
+        fi
+    done
     if [[ -z $blocked ]];then
         echo "There are currently no companies blocked by hoyaf."
     else
         echo "Currenly blocked companies:"
-        for asn in $blocked;do
+        for asn in ${blocked[@]};do
             found=""
             for company in "${!companies[@]}";do
                if [[ "${companies[$company]}" == $asn ]];then
@@ -105,6 +118,8 @@ while [ "$#" -gt 0 ];do
         -u) unblocklist=("${unblocklist[@]}" "$2");shift 2;;
         --block) blocklist=("${blocklist[@]}" "$2");shift 2;;
         --unblock) unblocklist=("${unblocklist[@]}" "$2");shift 2;;
+        -r) refresh="true";shift 1;;
+        --refresh) refresh="true";shift 1;;
         -h) printUsage;;
         --help) printUsage;;
         -l) listBlocked;;
