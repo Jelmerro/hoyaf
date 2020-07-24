@@ -7,7 +7,7 @@ Horsemen of your altered future
 
 - Fetches the list of ip ranges from whois.radb.net for any ASN
 - Drops all packets to any of the ips in the ranges
-- Checks and prevents duplicate rules from being added
+- Checks and aggregates rules before adding them
 - Enable or disable ip ranges in bulk for a single or all included companies
 - Block any other company that has an Autonomous System Number (ASN)
 - Persistent across reboots thanks to iptables-save (last line of the script)
@@ -35,7 +35,6 @@ The simplest way to ban all included companies:
 
 This will without a doubt cause many familiar sites to break, or even be unreachable.
 Included companies can also be unblocked in bulk with `./hoyaf -u all`.
-Both of these commands might take a while to process all the rules.
 Cherry-picking the companies that you don't want to deal with is recommended.
 Companies that were manually blocked are not included in the 'all' option,
 but they are visble in the list of currently active rules: `./hoyaf -l`.
