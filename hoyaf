@@ -21,8 +21,8 @@ function printUsage {
     echo "Usage: hoyaf [-b name] [-u name] [-l] [-h]"
     echo
     echo "Options:"
-    echo "  -b/--block <name>    block the ip ranges of a company by name or asn"
-    echo "  -u/--unblock <name>  unblock the ip ranges of a company by name or asn"
+    echo "  -b/--block <name>    block the ip ranges of a company by name or ASN"
+    echo "  -u/--unblock <name>  unblock the ip ranges of a company by name or ASN"
     echo "  -r/--refresh         request the ip ranges again, even if they are cached"
     echo "  -l/--list            show a list of all companies and the blockage status"
     echo "  -h/--help            show this help page"
@@ -32,7 +32,7 @@ function printUsage {
     echo "Companies that can be blocked by name using hoyaf:"
     echo ${!companies[@]}
     echo
-    echo "Hoyaf requires curl, proxychains and tor to fetch the ranges."
+    echo "Hoyaf uses whois, proxychains, tor and iptables to operate."
     echo "See https://github.com/Jelmerro/hoyaf for updates and details."
     exit
 }
@@ -41,14 +41,18 @@ function unblockByASN {
     echo "Unblocking $1"
     file="/root/.cache/hoyaf/$1"
     if [[ -f $file ]];then
-        echo "  Removing `wc -l < $file` rules from iptables"
+        count=0
+        total=`wc -l < $file`
+        echo "  Removing $total rules from iptables"
         while read line;do
-            iptables -C OUTPUT -d $line -j DROP 2> /dev/null
+            printf "\r  -> $count/$total    $line                           \r"
+            iptables -w -C OUTPUT -d $line -j DROP 2> /dev/null
             if [[ $? == 0 ]];then
-                iptables -D OUTPUT -d $line -j DROP
+                iptables -w -D OUTPUT -d $line -j DROP
             fi
+            count=$(($count + 1))
         done < $file
-        echo "  Done"
+        printf "\r  Done                                                    \n"
     else
         echo "  Skipped, not currently blocked"
     fi
@@ -59,20 +63,24 @@ function blockByASN {
     echo "Blocking $1"
     file="/root/.cache/hoyaf/$1"
     if [[ ! -f $file || ! -s $file || $refresh == "true" ]];then
-        echo "  Downloading ip ranges from ipinfo.io"
-        proxychains curl -L "https://ipinfo.io/$1#blocks" 2>/dev/null | grep "$1/" | cut -f 2 -d '"' | cut -f 3-4 -d '/' | sed '/::/d' > $file
+        echo "  Downloading ip ranges from whois.radb.net"
+        proxychains whois -h whois.radb.net "!G$1" 2>/dev/null | grep -Eo "([0-9.]+){4}/[0-9]+" > $file
     else
         echo "  Using cached ranges, specify '--refresh' to download them anyway"
     fi
     if [[ -s $file ]];then
-        echo "  Adding `wc -l < $file` rules to iptables"
+        count=0
+        total=`wc -l < $file`
+        echo "  Adding $total rules to iptables"
         while read line;do
-            iptables -C OUTPUT -d $line -j DROP 2> /dev/null
+            printf "\r  -> $count/$total    $line                            \r"
+            iptables -w -C OUTPUT -d $line -j DROP 2> /dev/null
             if [[ $? == 1 ]];then
-                iptables -I OUTPUT -d $line -j DROP
+                iptables -w -I OUTPUT -d $line -j DROP
             fi
+            count=$(($count + 1))
         done < $file
-        echo "  Done"
+        printf "\r  Done                                                    \n"
     else
         echo "  Failure, could not download ip ranges"
         rm $file
@@ -100,12 +108,12 @@ function listBlocked {
             found=""
             for company in "${!companies[@]}";do
                if [[ "${companies[$company]}" == $asn ]];then
-                   echo "$company ($asn)"
+                   echo "$company ($asn) - `cat /root/.cache/hoyaf/$asn | wc -l` rules"
                    found="y"
                fi
             done
             if [[ -z $found ]];then
-                echo $asn
+                echo "$asn - `cat /root/.cache/hoyaf/$asn | wc -l` rules"
             fi
         done
     fi
