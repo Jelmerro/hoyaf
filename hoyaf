@@ -15,7 +15,7 @@ refresh="false"
 
 function checkForTool {
     which $1 &> /dev/null
-    if [[ $? -ne 0 ]];then
+    if [[ $? != 0 ]];then
         echo "Required tool '$1' not found, please install it first"
         exit 1
     fi
@@ -40,7 +40,7 @@ function printUsage {
     echo "Companies that can be blocked by name using hoyaf:"
     echo ${!companies[@]}
     echo
-    echo "Hoyaf uses whois, proxychains, tor and iptables to operate."
+    echo "Hoyaf uses whois, proxychains, tor, aggregate and iptables to operate."
     echo "See https://github.com/Jelmerro/hoyaf for updates and details."
     exit
 }

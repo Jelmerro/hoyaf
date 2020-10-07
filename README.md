@@ -51,6 +51,8 @@ Other terms are inspired by the great King Gizzard & the Lizard Wizard album nam
 
 Hoyaf is written in bash and uses whois, proxychains and tor to fetch the ip ranges.
 The ranges are then blocked using iptables.
+If you want to combine [vpn_or_bust](https://github.com/Jelmerro/vpn_or_bust) with hoyaf,
+make sure to run vpn_or_bust first.
 If the rules are not persistent when rebooting,
 check if the iptables location at the end of the program is correct for your linux distribution.
 
