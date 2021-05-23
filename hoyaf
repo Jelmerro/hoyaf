@@ -80,27 +80,30 @@ function blockByASN {
     file="/root/.cache/hoyaf/$1"
     if [[ ! -f $file || ! -s $file || $refresh == "true" ]];then
         echo "  Downloading ip ranges from whois.radb.net"
-        proxychains whois -h whois.radb.net "!G$1" 2>/dev/null | grep -Eo "([0-9.]+){4}/[0-9]+" | aggregate 2> /dev/null > $file
+        ranges=`proxychains whois -h whois.radb.net "!G$1" 2>/dev/null`
+        if [[ $? == 0 ]];then
+            echo $ranges | grep -Eo "([0-9.]+){4}/[0-9]+" | aggregate 2>/dev/null > $file
+        elif [[ -s $file ]];then
+            echo "  Using cached ranges, updating the ranges failed"
+        else
+            echo "  Failure, could not download ip ranges"
+            return
+        fi
     else
         echo "  Using cached ranges, specify '--refresh' to download them anyway"
     fi
-    if [[ -s $file ]];then
-        count=0
-        total=`wc -l < $file`
-        echo "  Adding $total rules to iptables"
-        while read line;do
-            printf "\r  -> $count/$total    $line                            \r"
-            iptables -w -C OUTPUT -d $line -j DROP 2> /dev/null
-            if [[ $? == 1 ]];then
-                iptables -w -I OUTPUT -d $line -j DROP
-            fi
-            count=$(($count + 1))
-        done < $file
-        printf "\r  Done                                                    \n"
-    else
-        echo "  Failure, could not download ip ranges"
-        rm $file
-    fi
+    count=0
+    total=`wc -l < $file`
+    echo "  Adding $total rules to iptables"
+    while read line;do
+        printf "\r  -> $count/$total    $line                            \r"
+        iptables -w -C OUTPUT -d $line -j DROP 2> /dev/null
+        if [[ $? == 1 ]];then
+            iptables -w -I OUTPUT -d $line -j DROP
+        fi
+        count=$(($count + 1))
+    done < $file
+    printf "\r  Done                                                    \n"
 }
 
 function listBlocked {
